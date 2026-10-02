@@ -1,0 +1,61 @@
+name: T&P Portal Monitor
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 minutes (GitHub may delay runs a few minutes)
+  workflow_dispatch:          # lets you run it manually from the Actions tab
+    inputs:
+      test_notification:
+        description: "Only send a test notification (skip the portal check)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write             # needed to commit state.json back to the repo
+
+concurrency:
+  group: portal-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Run portal check
+        run: python check_portal.py
+        env:
+          TEST_NOTIFY: ${{ github.event.inputs.test_notification == 'true' && '1' || '0' }}
+          PORTAL_LOGIN_URL: ${{ secrets.PORTAL_LOGIN_URL }}
+          PORTAL_NOTICES_URL: ${{ secrets.PORTAL_NOTICES_URL }}
+          PORTAL_USER: ${{ secrets.PORTAL_USER }}
+          PORTAL_PASS: ${{ secrets.PORTAL_PASS }}
+          PORTAL_USER_FIELD: ${{ secrets.PORTAL_USER_FIELD }}
+          PORTAL_PASS_FIELD: ${{ secrets.PORTAL_PASS_FIELD }}
+          PORTAL_EXTRA_FIELDS: ${{ secrets.PORTAL_EXTRA_FIELDS }}
+          NOTICE_SELECTOR: ${{ secrets.NOTICE_SELECTOR }}
+          LOGIN_REQUIRED: ${{ secrets.LOGIN_REQUIRED }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+
+      - name: Commit updated state
+        run: |
+          git config user.name  "portal-monitor-bot"
+          git config user.email "portal-monitor-bot@users.noreply.github.com"
+          git add state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update portal state"
+            git push
+          fi
