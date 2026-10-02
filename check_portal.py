@@ -99,7 +99,12 @@ def fetch_notices_html():
         login(s)
     r = s.get(NOTICES_URL, timeout=30)
     r.raise_for_status()
-    if LOGIN_REQUIRED and BeautifulSoup(r.text, "html.parser").find("input", {"type": "password"}):
+    soup = BeautifulSoup(r.text, "html.parser")
+    print(f"DEBUG: Loaded page URL: {r.url}")
+    print(f"DEBUG: Page title: {soup.title.string.strip() if soup.title and soup.title.string else 'None'}")
+    tables = [f"<table id='{t.get('id')}' class='{t.get('class')}'>" for t in soup.find_all("table")]
+    print(f"DEBUG: Found {len(tables)} tables: {tables}")
+    if LOGIN_REQUIRED and soup.find("input", {"type": "password"}):
         sys.exit("Login seems to have failed (password box still on the page). Check credentials / field names.")
     return r.text
 
@@ -107,13 +112,19 @@ def fetch_notices_html():
 def extract_items(html):
     soup = BeautifulSoup(html, "html.parser")
     items = []
-    for el in soup.select(NOTICE_SELECTOR):
+    matches = soup.select(NOTICE_SELECTOR)
+    print(f"DEBUG: Selector '{NOTICE_SELECTOR}' matched {len(matches)} elements.")
+    for el in matches:
         text = re.sub(r"\s+", " ", el.get_text(" ", strip=True))
         if not text:
             continue
         a = el.find("a", href=True)
         link = urljoin(NOTICES_URL, a["href"]) if a else ""
         items.append(f"{text} | {link}" if link else text)
+    if not items:
+        # print first 500 chars of body text
+        body = soup.find("body")
+        print("DEBUG: Body snippet:", repr(body.get_text(strip=True)[:400]) if body else "No body tag")
     return list(dict.fromkeys(items))  # de-duplicate, keep order
 
 
