@@ -88,8 +88,10 @@ def login(session):
     payload[USER_FIELD] = USER
     payload[PASS_FIELD] = PASSWORD
 
+    print(f"DEBUG: Posting login to: {action} with fields {list(payload.keys())}")
     resp = session.post(action, data=payload, timeout=30)
     resp.raise_for_status()
+    print(f"DEBUG: Login response code: {resp.status_code}, landing URL: {resp.url}")
 
 
 def fetch_notices_html():
@@ -99,6 +101,10 @@ def fetch_notices_html():
         login(s)
     r = s.get(NOTICES_URL, timeout=30)
     r.raise_for_status()
+    print(f"DEBUG: Status code: {r.status_code}")
+    print(f"DEBUG: Content-Type: {r.headers.get('content-type')}")
+    print(f"DEBUG: Content length: {len(r.text)}")
+    print(f"DEBUG: Raw response preview: {repr(r.text[:500])}")
     soup = BeautifulSoup(r.text, "html.parser")
     print(f"DEBUG: Loaded page URL: {r.url}")
     print(f"DEBUG: Page title: {soup.title.string.strip() if soup.title and soup.title.string else 'None'}")
