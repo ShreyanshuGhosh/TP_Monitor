@@ -71,17 +71,27 @@ def notify(text, subject="T&P Portal: new update"):
 
 # ---------------------------------------------------------------- portal access
 def login(session):
+    global USER_FIELD
     r = session.get(LOGIN_URL, timeout=30)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # Pick the form that contains the password box; carry over hidden fields (CSRF tokens etc.)
+    # Pick the form that contains the password box
     form = next((f for f in soup.find_all("form") if f.find("input", {"type": "password"})), None)
     payload, action = {}, LOGIN_URL
     if form:
-        for inp in form.find_all("input", {"type": "hidden"}):
-            if inp.get("name"):
-                payload[inp["name"]] = inp.get("value", "")
+        for inp in form.find_all("input"):
+            n = inp.get("name")
+            if n and inp.get("type") in ("hidden", "submit"):
+                payload[n] = inp.get("value", "")
+
+        all_input_names = [i.get("name") for i in form.find_all("input") if i.get("name")]
+        if USER_FIELD not in all_input_names:
+            if "identity" in all_input_names:
+                USER_FIELD = "identity"
+            elif "email" in all_input_names:
+                USER_FIELD = "email"
+
         action = urljoin(r.url, form.get("action") or r.url)
 
     payload.update(json.loads(EXTRA_FIELDS))
