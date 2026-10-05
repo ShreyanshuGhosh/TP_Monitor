@@ -34,6 +34,8 @@ USER_FIELD = env("PORTAL_USER_FIELD", "username")
 PASS_FIELD = env("PORTAL_PASS_FIELD", "password")
 EXTRA_FIELDS = env("PORTAL_EXTRA_FIELDS", "{}")  # JSON, e.g. {"role": "student"}
 NOTICE_SELECTOR = env("NOTICE_SELECTOR", "table tr")  # CSS selector, one match per notice
+UPDATE_SELECTOR = env("UPDATE_SELECTOR", "#newseventsx1 tbody tr")  # dashboard NOTIFICATION panel rows
+UPDATE_PREFIX = "[Update] "
 LOGIN_REQUIRED = env("LOGIN_REQUIRED", "true").lower() != "false"
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"}
@@ -128,6 +130,21 @@ def extract_items(html):
     return list(dict.fromkeys(items))  # de-duplicate, keep order
 
 
+def extract_updates(html):
+    """Rows of the dashboard NOTIFICATION panel (interviews, shortlists, results...)."""
+    soup = BeautifulSoup(html, "html.parser")
+    items = []
+    for el in soup.select(UPDATE_SELECTOR):
+        cell = el.find("td") or el  # first cell only; later cells are hidden sort keys
+        text = re.sub(r"\s+", " ", cell.get_text(" ", strip=True))
+        if not text:
+            continue
+        a = cell.find("a", href=True)
+        link = urljoin(NOTICES_URL, a["href"]) if a else ""
+        items.append(f"{UPDATE_PREFIX}{text} | {link}" if link else f"{UPDATE_PREFIX}{text}")
+    return list(dict.fromkeys(items))
+
+
 # ---------------------------------------------------------------- state
 def load_state():
     try:
@@ -153,12 +170,23 @@ def main():
     if LOGIN_REQUIRED and not (LOGIN_URL and USER and PASSWORD):
         sys.exit("PORTAL_LOGIN_URL, PORTAL_USER and PORTAL_PASS are required (or set LOGIN_REQUIRED=false).")
 
-    items = extract_items(fetch_notices_html())
+    html = fetch_notices_html()
+    items = extract_items(html)
     if not items:
         sys.exit(f"No notices matched selector '{NOTICE_SELECTOR}'. Fix NOTICE_SELECTOR.")
+    updates = extract_updates(html)
+    if not updates:
+        print(f"WARNING: no rows matched UPDATE_SELECTOR '{UPDATE_SELECTOR}'; notification panel not monitored.")
 
     state = load_state()
     previous = state.get("items", [])
+
+    # First run with update tracking: store current updates as baseline without alerting.
+    if state.get("initialized") and updates and not any(p.startswith(UPDATE_PREFIX) for p in previous):
+        previous = previous + updates
+        print(f"Update baseline saved ({len(updates)} items).")
+
+    items = updates + items
 
     if not state.get("initialized"):
         save_state(items, [])
