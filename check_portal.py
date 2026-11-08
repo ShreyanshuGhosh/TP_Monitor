@@ -26,6 +26,16 @@ def env(name, default=""):
     return os.environ.get(name) or default
 
 
+def normalize_selector(value, fallback):
+    """Ignore placeholder values and fall back to a sane default."""
+    if value is None:
+        return fallback
+    cleaned = value.strip()
+    if not cleaned or cleaned in {"***", "<set-me>", "placeholder", "CHANGE_ME"}:
+        return fallback
+    return cleaned
+
+
 LOGIN_URL = env("PORTAL_LOGIN_URL")
 NOTICES_URL = env("PORTAL_NOTICES_URL")
 USER = env("PORTAL_USER")
@@ -33,8 +43,8 @@ PASSWORD = env("PORTAL_PASS")
 USER_FIELD = env("PORTAL_USER_FIELD", "username")
 PASS_FIELD = env("PORTAL_PASS_FIELD", "password")
 EXTRA_FIELDS = env("PORTAL_EXTRA_FIELDS", "{}")  # JSON, e.g. {"role": "student"}
-NOTICE_SELECTOR = env("NOTICE_SELECTOR", "table tr")  # CSS selector, one match per notice
-UPDATE_SELECTOR = env("UPDATE_SELECTOR", "#newseventsx1 tbody tr")  # dashboard NOTIFICATION panel rows
+NOTICE_SELECTOR = normalize_selector(env("NOTICE_SELECTOR"), "table tr")  # CSS selector, one match per notice
+UPDATE_SELECTOR = normalize_selector(env("UPDATE_SELECTOR"), "#newseventsx1 tbody tr")  # dashboard NOTIFICATION panel rows
 UPDATE_PREFIX = "[Update] "
 LOGIN_REQUIRED = env("LOGIN_REQUIRED", "true").lower() != "false"
 
@@ -173,7 +183,9 @@ def main():
     html = fetch_notices_html()
     items = extract_items(html)
     if not items:
-        sys.exit(f"No notices matched selector '{NOTICE_SELECTOR}'. Fix NOTICE_SELECTOR.")
+        print(f"WARNING: no notices matched selector '{NOTICE_SELECTOR}'. Continuing with an empty list; no alert will be sent.")
+        save_state([], [])
+        return
     updates = extract_updates(html)
     if not updates:
         print(f"WARNING: no rows matched UPDATE_SELECTOR '{UPDATE_SELECTOR}'; notification panel not monitored.")
